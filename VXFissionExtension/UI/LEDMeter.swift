@@ -2,7 +2,7 @@
 //  LEDMeter.swift
 //  VXFissionExtension
 //
-//  A horizontal LED meter that lights up based on gain level.
+//  A horizontal LED meter that lights up based on delay amount.
 //  Layout: [R] [Y] [G] [G] [G] [B] [G] [G] [G] [Y] [R]
 //  Blue center = plugin active. LEDs fill outward as gain increases.
 //
@@ -10,7 +10,7 @@
 import SwiftUI
 
 struct LEDMeter: View {
-    let gainParam: ObservableAUParameter
+    let delayParam: ObservableAUParameter
     let bypassParam: ObservableAUParameter
 
     private struct LEDSpec {
@@ -35,9 +35,9 @@ struct LEDMeter: View {
     // Plugin is active when not bypassed
     var isActive: Bool { !bypassParam.boolValue }
 
-    // Maps gain (0–2) to a level 0–5
+    // Maps delay time (0–500 ms) to a level 0–5
     var level: Int {
-        let normalized = Double(gainParam.value - gainParam.min) / Double(gainParam.max - gainParam.min)
+        let normalized = Double(delayParam.value - delayParam.min) / Double(delayParam.max - delayParam.min)
         return min(Int(normalized * 5.0), 5)
     }
 

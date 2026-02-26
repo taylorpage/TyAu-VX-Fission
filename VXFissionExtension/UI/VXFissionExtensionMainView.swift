@@ -17,13 +17,13 @@ struct VXFissionExtensionMainView: View {
                 .fill(Color(white: 0.9))
                 .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
 
-            // Gain knob centered
-            ParameterKnob(param: parameterTree.global.outputGain)
+            // Delay knob centered
+            ParameterKnob(param: parameterTree.global.delayTime)
 
             // LED meter top-center
             VStack {
                 LEDMeter(
-                    gainParam: parameterTree.global.outputGain,
+                    delayParam: parameterTree.global.delayTime,
                     bypassParam: parameterTree.global.bypass
                 )
                 .padding(.top, 20)

@@ -93,7 +93,7 @@ public class VXFissionExtensionAudioUnit: AUAudioUnit, @unchecked Sendable
 		kernel.setMusicalContextBlock(self.musicalContextBlock)
         kernel.initialize(Int32(inputChannelCount), Int32(outputChannelCount), outputBus!.format.sampleRate)
 
-        processHelper?.setChannelCount(inputChannelCount, outputChannelCount)
+        processHelper?.setChannelCount(inputChannelCount, outputChannelCount, self.maximumFramesToRender)
 
 		try super.allocateRenderResources()
 	}

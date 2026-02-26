@@ -11,12 +11,12 @@ import AudioToolbox
 let VXFissionExtensionParameterSpecs = ParameterTreeSpec {
     ParameterGroupSpec(identifier: "global", name: "Global") {
         ParameterSpec(
-            address: .outputGain,
-            identifier: "outputGain",
-            name: "Gain",
-            units: .linearGain,
-            valueRange: 0.0...2.0,
-            defaultValue: 1.0
+            address: .delayTime,
+            identifier: "delayTime",
+            name: "Delay",
+            units: .milliseconds,
+            valueRange: 0.0...50.0,
+            defaultValue: 0.0
         )
         ParameterSpec(
             address: .delayChannel,

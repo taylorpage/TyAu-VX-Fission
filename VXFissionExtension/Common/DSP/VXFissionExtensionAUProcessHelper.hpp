@@ -24,10 +24,18 @@ public:
     {
     }
     
-    void setChannelCount(UInt32 inputChannelCount, UInt32 outputChannelCount)
+    void setChannelCount(UInt32 inputChannelCount, UInt32 outputChannelCount, UInt32 maxFrames)
     {
         mInputBuffers.resize(inputChannelCount);
         mOutputBuffers.resize(outputChannelCount);
+        // Pre-allocate per-channel scratch buffers used when the host passes null
+        // output pointers. Each channel needs its own distinct block of memory so
+        // that the kernel never sees two output channels aliasing the same buffer
+        // (which would corrupt the dry/wet split in the delay path).
+        mScratchOutput.resize(outputChannelCount);
+        for (auto& ch : mScratchOutput) {
+            ch.assign(maxFrames, 0.0f);
+        }
     }
 
     /**
@@ -133,14 +141,14 @@ public:
 			 See the description of the canProcessInPlace property.
 			 */
 		
-			// If passed null output buffer pointers, fall back to input buffers.
-			// Clamp src index to avoid out-of-bounds when output has more channels than input (e.g. mono→stereo).
+			// If passed null output buffer pointers, use our pre-allocated per-channel
+			// scratch buffers. Do NOT alias the input buffers: with a delay effect the
+			// kernel writes output before reading all input, so aliasing causes both
+			// channels to receive the delayed signal instead of one dry / one delayed.
 			AudioBufferList *outAudioBufferList = outputData;
 			if (outAudioBufferList->mBuffers[0].mData == nullptr) {
-				UInt32 numInBufs = inAudioBufferList->mNumberBuffers;
 				for (UInt32 i = 0; i < outAudioBufferList->mNumberBuffers; ++i) {
-					UInt32 srcIdx = (i < numInBufs) ? i : (numInBufs - 1);
-					outAudioBufferList->mBuffers[i].mData = inAudioBufferList->mBuffers[srcIdx].mData;
+					outAudioBufferList->mBuffers[i].mData = mScratchOutput[i].data();
 				}
 			}
 		
@@ -152,5 +160,6 @@ private:
     VXFissionExtensionDSPKernel& mKernel;
     std::vector<const float*> mInputBuffers;
     std::vector<float*> mOutputBuffers;
+    std::vector<std::vector<float>> mScratchOutput;
     BufferedInputBus& mBufferedInputBus;
 };
