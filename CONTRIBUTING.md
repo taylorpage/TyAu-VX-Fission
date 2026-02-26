@@ -1,6 +1,6 @@
-# Contributing to TyAu-Distortion
+# Contributing to TyAu-Template
 
-Thank you for contributing to TyAu-Distortion! This document outlines our commit message standards and contribution guidelines.
+Thank you for contributing to TyAu! This document outlines our commit message standards and contribution guidelines.
 
 ## Git Commit Message Standards
 
@@ -34,7 +34,7 @@ The type must be one of the following:
 
 ### Scope
 
-The scope is optional and should specify the place of the commit change. Examples for TyAu-Distortion:
+The scope is optional and should specify the place of the commit change. Examples:
 
 - `ui`
 - `dsp`
@@ -65,9 +65,18 @@ The footer should contain any information about Breaking Changes and is also the
 
 Breaking Changes should start with the word `BREAKING CHANGE:` with a space or two newlines. The rest of the commit message is then used for this.
 
+Every commit footer **must** include the following authorship line:
+
+```
+Authored-By: Taylor Page <jontaylorpage@gmail.com>
+```
+
+This applies to all commits regardless of whether they were written manually or with AI assistance. Do not use `Co-Authored-By` — use `Authored-By` with the line above.
+
 ### Examples
 
 #### Simple commit
+
 ```
 feat(dsp): add soft clipping algorithm
 
@@ -75,9 +84,11 @@ Implement soft clipping to provide smoother distortion character.
 This allows for more musical-sounding saturation.
 
 Closes #42
+Authored-By: Taylor Page <jontaylorpage@gmail.com>
 ```
 
 #### Bug fix
+
 ```
 fix(ui): correct knob parameter mapping
 
@@ -85,9 +96,11 @@ The drive knob was not properly scaling values, causing incorrect
 gain staging. Fixed the logarithmic mapping calculation.
 
 Fixes #123
+Authored-By: Taylor Page <jontaylorpage@gmail.com>
 ```
 
 #### Breaking change
+
 ```
 feat(audio-engine)!: change buffer size to 512 samples
 
@@ -97,6 +110,7 @@ require configuration updates for low-latency setups.
 ```
 
 #### Documentation
+
 ```
 docs: update README with installation instructions
 
@@ -109,6 +123,7 @@ including required dependencies and troubleshooting tips.
 A commit template has been configured for this repository. When you run `git commit`, your editor will open with the template pre-populated with helpful reminders.
 
 To manually set up the template:
+
 ```bash
 git config commit.template .gitmessage
 ```
