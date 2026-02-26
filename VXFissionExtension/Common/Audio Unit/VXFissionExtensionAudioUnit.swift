@@ -19,13 +19,14 @@ public class VXFissionExtensionAudioUnit: AUAudioUnit, @unchecked Sendable
     private var _outputBusses: AUAudioUnitBusArray!
 
 	@objc override init(componentDescription: AudioComponentDescription, options: AudioComponentInstantiationOptions) throws {
-		let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 2)!
+		let monoFormat   = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
+		let stereoFormat = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 2)!
 		try super.init(componentDescription: componentDescription, options: options)
-		outputBus = try AUAudioUnitBus(format: format)
-        outputBus?.maximumChannelCount = 8
-        
-        // Create the input and output busses.
-        inputBus.initialize(format, 8);
+		outputBus = try AUAudioUnitBus(format: stereoFormat)
+        outputBus?.maximumChannelCount = 2
+
+        // Input defaults to mono so Logic registers this as a Mono→Stereo plugin.
+        inputBus.initialize(monoFormat, 2);
 
         // Create the input and output bus arrays.
         _inputBusses = AUAudioUnitBusArray(audioUnit: self, busType: AUAudioUnitBusType.input, busses: [inputBus.bus!])
@@ -45,12 +46,7 @@ public class VXFissionExtensionAudioUnit: AUAudioUnit, @unchecked Sendable
     }
     
     public override var channelCapabilities: [NSNumber]? {
-        // Explicitly declare mono and stereo support
-        // Format: [inputChannels, outputChannels, inputChannels, outputChannels, ...]
-        return [
-            1, 1,  // Mono in, Mono out
-            2, 2   // Stereo in, Stereo out
-        ] as [NSNumber]
+        return [1, 1, 1, 2, 2, 2] as [NSNumber]
     }
 
     public override var  maximumFramesToRender: AUAudioFrameCount {
@@ -73,6 +69,8 @@ public class VXFissionExtensionAudioUnit: AUAudioUnit, @unchecked Sendable
         }
     }
 	
+    public override var canProcessInPlace: Bool { return false }
+
     // MARK: - Rendering
     public override var internalRenderBlock: AUInternalRenderBlock {
         return processHelper!.internalRenderBlock()
@@ -84,7 +82,8 @@ public class VXFissionExtensionAudioUnit: AUAudioUnit, @unchecked Sendable
         let inputChannelCount = self.inputBusses[0].format.channelCount
         let outputChannelCount = self.outputBusses[0].format.channelCount
 		
-        if outputChannelCount != inputChannelCount {
+        guard inputChannelCount >= 1, inputChannelCount <= 2,
+              outputChannelCount >= 1, outputChannelCount <= 2 else {
             setRenderResourcesAllocated(false)
             throw NSError(domain: NSOSStatusErrorDomain, code: Int(kAudioUnitErr_FailedInitialization), userInfo: nil)
         }

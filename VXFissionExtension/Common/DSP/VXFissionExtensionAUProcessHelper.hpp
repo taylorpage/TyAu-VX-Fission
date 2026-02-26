@@ -41,15 +41,17 @@ public:
         AURenderEvent const *nextEvent = events; // events is a linked list, at the beginning, the nextEvent is the first event
 
         auto callProcess = [this] (AudioBufferList* inBufferListPtr, AudioBufferList* outBufferListPtr, AUEventSampleTime now, AUAudioFrameCount frameCount, AUAudioFrameCount const frameOffset) {
-            for (int channel = 0; channel < inBufferListPtr->mNumberBuffers; ++channel) {
-                mInputBuffers[channel] = (const float*)inBufferListPtr->mBuffers[channel].mData  + frameOffset;
+            for (int channel = 0; channel < (int)inBufferListPtr->mNumberBuffers; ++channel) {
+                mInputBuffers[channel] = (const float*)inBufferListPtr->mBuffers[channel].mData + frameOffset;
             }
-            
-            for (int channel = 0; channel < outBufferListPtr->mNumberBuffers; ++channel) {
+            for (int channel = 0; channel < (int)outBufferListPtr->mNumberBuffers; ++channel) {
                 mOutputBuffers[channel] = (float*)outBufferListPtr->mBuffers[channel].mData + frameOffset;
             }
 
-            mKernel.process(mInputBuffers, mOutputBuffers, now, frameCount);
+            mKernel.process(
+                std::span<const float*>(mInputBuffers.data(), inBufferListPtr->mNumberBuffers),
+                std::span<float*>(mOutputBuffers.data(), outBufferListPtr->mNumberBuffers),
+                now, frameCount);
         };
         
         while (framesRemaining > 0) {
@@ -131,11 +133,14 @@ public:
 			 See the description of the canProcessInPlace property.
 			 */
 		
-			// If passed null output buffer pointers, process in-place in the input buffer.
+			// If passed null output buffer pointers, fall back to input buffers.
+			// Clamp src index to avoid out-of-bounds when output has more channels than input (e.g. mono→stereo).
 			AudioBufferList *outAudioBufferList = outputData;
 			if (outAudioBufferList->mBuffers[0].mData == nullptr) {
+				UInt32 numInBufs = inAudioBufferList->mNumberBuffers;
 				for (UInt32 i = 0; i < outAudioBufferList->mNumberBuffers; ++i) {
-					outAudioBufferList->mBuffers[i].mData = inAudioBufferList->mBuffers[i].mData;
+					UInt32 srcIdx = (i < numInBufs) ? i : (numInBufs - 1);
+					outAudioBufferList->mBuffers[i].mData = inAudioBufferList->mBuffers[srcIdx].mData;
 				}
 			}
 		
