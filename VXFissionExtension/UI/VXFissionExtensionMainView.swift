@@ -13,9 +13,13 @@ struct VXFissionExtensionMainView: View {
     var body: some View {
         ZStack {
             // Background
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(white: 0.9))
-                .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+            if let bgImage = NSImage(named: "yellowBackground") {
+                Image(nsImage: bgImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+            }
 
             // Delay knob centered
             ParameterKnob(param: parameterTree.global.delayTime)
@@ -26,15 +30,25 @@ struct VXFissionExtensionMainView: View {
                     delayParam: parameterTree.global.delayTime,
                     bypassParam: parameterTree.global.bypass
                 )
-                .padding(.top, 20)
+                .padding(.top, 12)
+                if let fissionImage = NSImage(named: "fission") {
+                    Image(nsImage: fissionImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 204)
+                }
                 Spacer()
             }
 
-            // Bypass stomp bottom-center
+            // Reset button bottom-right
             VStack {
                 Spacer()
-                BypassButton(param: parameterTree.global.bypass)
-                    .padding(.bottom, 20)
+                HStack {
+                    Spacer()
+                    ResetButton(param: parameterTree.global.delayTime)
+                        .padding(.trailing, 12)
+                        .padding(.bottom, 12)
+                }
             }
 
             // Logo bottom-left
