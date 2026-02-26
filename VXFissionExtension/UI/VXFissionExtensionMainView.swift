@@ -17,20 +17,24 @@ struct VXFissionExtensionMainView: View {
                 .fill(Color(white: 0.9))
                 .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
 
-            // Knob centered
-            ParameterKnob(param: parameterTree.global.tubegain)
+            // Gain knob centered
+            ParameterKnob(param: parameterTree.global.outputGain)
 
             // LED meter top-center
             VStack {
                 LEDMeter(
-                    gainParam: parameterTree.global.tubegain,
+                    gainParam: parameterTree.global.outputGain,
                     bypassParam: parameterTree.global.bypass
                 )
                 .padding(.top, 20)
                 Spacer()
             }
 
-            // Stomp bottom-center
+            // Channel toggle (L / R) below the knob
+            ChannelToggle(param: parameterTree.global.delayChannel)
+                .offset(y: 90)
+
+            // Bypass stomp bottom-center
             VStack {
                 Spacer()
                 BypassButton(param: parameterTree.global.bypass)
@@ -58,6 +62,4 @@ struct VXFissionExtensionMainView: View {
         }
         .frame(width: 360, height: 360)
     }
-
-
 }
