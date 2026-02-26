@@ -42,48 +42,138 @@ struct LEDMeter: View {
         return min(Int((absMs / maxMs) * 5.0), 5)
     }
 
+    private let imageWidth: CGFloat = 300
+    private let imageHeight: CGFloat = 44
+    private let ledSize: CGFloat = 16
+    private let ledSpacing: CGFloat = 8.25
+    private let ledOffsetY: CGFloat = -3
+
     var body: some View {
-        HStack(spacing: 5) {
-            ForEach(0..<11, id: \.self) { i in
-                let spec = specs[i]
-                let isCenter = spec.distance == 0
-                let isLit = isActive && (isCenter || level >= spec.distance)
-                ledView(color: spec.color, isLit: isLit)
+        ZStack {
+            // Border chassis behind the LEDs
+            if let borderImage = NSImage(named: "ledBorder") {
+                Image(nsImage: borderImage)
+                    .resizable()
+                    .frame(width: imageWidth, height: imageHeight)
             }
+
+            // LEDs centered over the holes
+            HStack(spacing: ledSpacing) {
+                ForEach(0..<11, id: \.self) { i in
+                    let spec = specs[i]
+                    let isCenter = spec.distance == 0
+                    let isLit = isActive && (isCenter || level >= spec.distance)
+                    ledView(color: spec.color, isLit: isLit)
+                }
+            }
+            .offset(y: ledOffsetY)
         }
     }
 
     private func ledView(color: Color, isLit: Bool) -> some View {
-        ZStack {
+        let inner = ledSize - 2.0
+
+        return ZStack {
+            // Dark socket base
+            Circle()
+                .fill(Color(white: 0.06))
+                .frame(width: ledSize, height: ledSize)
+
             if isLit {
-                // Lit: full color fill
-                Circle()
-                    .fill(color)
-                    .frame(width: 14, height: 14)
-                // Specular highlight
+                // Emitter core — concentrated bright glow from within, slightly below center
                 Circle()
                     .fill(
                         RadialGradient(
-                            gradient: Gradient(colors: [Color.white.opacity(0.55), Color.clear]),
-                            center: .center,
+                            colors: [
+                                Color.white,
+                                color,
+                                color.opacity(0.5),
+                                Color.clear
+                            ],
+                            center: UnitPoint(x: 0.5, y: 0.56),
                             startRadius: 0,
-                            endRadius: 7
+                            endRadius: inner * 0.52
                         )
                     )
-                    .frame(width: 14, height: 14)
+                    .frame(width: inner, height: inner)
+
+                // Glass body — mostly transparent, just a whisper of color
+                Circle()
+                    .fill(color.opacity(0.07))
+                    .frame(width: inner, height: inner)
+
+                // Primary specular — wide soft arc dominating upper dome
+                Ellipse()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.88), Color.white.opacity(0.0)],
+                            startPoint: UnitPoint(x: 0.5, y: 0.0),
+                            endPoint: UnitPoint(x: 0.5, y: 1.0)
+                        )
+                    )
+                    .frame(width: inner * 0.75, height: inner * 0.42)
+                    .offset(x: 0, y: -inner * 0.17)
+                    .blur(radius: 0.7)
+
+                // Secondary catchlight — tiny bright dot for realism
+                Circle()
+                    .fill(Color.white.opacity(0.92))
+                    .frame(width: inner * 0.17, height: inner * 0.17)
+                    .offset(x: -inner * 0.16, y: -inner * 0.23)
+                    .blur(radius: 0.25)
+
+                // Subtle color refraction at edge
+                Circle()
+                    .stroke(color.opacity(0.35), lineWidth: 1.0)
+                    .frame(width: inner - 0.5, height: inner - 0.5)
+
             } else {
-                // Unlit: very dark base with a faint color tint so it reads as a dark colored bulb
+                // Unlit glass — nearly transparent, dark emitter visible through dome
                 Circle()
-                    .fill(Color(white: 0.08))
-                    .frame(width: 14, height: 14)
+                    .fill(
+                        RadialGradient(
+                            colors: [Color(white: 0.13), Color(white: 0.04)],
+                            center: UnitPoint(x: 0.5, y: 0.56),
+                            startRadius: 0,
+                            endRadius: inner / 2
+                        )
+                    )
+                    .frame(width: inner, height: inner)
+
+                // Barely-there color tint
                 Circle()
-                    .fill(color.opacity(0.25))
-                    .frame(width: 14, height: 14)
+                    .fill(color.opacity(0.06))
+                    .frame(width: inner, height: inner)
+
+                // Primary specular still present — glass is always glassy
+                Ellipse()
+                    .fill(Color.white.opacity(0.2))
+                    .frame(width: inner * 0.68, height: inner * 0.36)
+                    .offset(x: 0, y: -inner * 0.16)
+                    .blur(radius: 0.9)
+
+                // Faint catchlight
+                Circle()
+                    .fill(Color.white.opacity(0.28))
+                    .frame(width: inner * 0.15, height: inner * 0.15)
+                    .offset(x: -inner * 0.15, y: -inner * 0.21)
+                    .blur(radius: 0.25)
             }
+
+            // Outer glass rim — gradient stroke: bright top-left, dark bottom-right
             Circle()
-                .stroke(Color.black.opacity(0.6), lineWidth: 1)
-                .frame(width: 14, height: 14)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.3), Color.black.opacity(0.65)],
+                        startPoint: UnitPoint(x: 0.25, y: 0.0),
+                        endPoint: UnitPoint(x: 0.75, y: 1.0)
+                    ),
+                    lineWidth: 1.0
+                )
+                .frame(width: ledSize, height: ledSize)
         }
-        .shadow(color: isLit ? color.opacity(0.9) : .clear, radius: isLit ? 5 : 0)
+        // Tight bright core glow + wide soft colour halo
+        .shadow(color: isLit ? color.opacity(0.95) : .clear, radius: 3)
+        .shadow(color: isLit ? color.opacity(0.4) : .clear, radius: 9)
     }
 }

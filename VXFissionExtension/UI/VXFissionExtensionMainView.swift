@@ -13,7 +13,7 @@ struct VXFissionExtensionMainView: View {
     var body: some View {
         ZStack {
             // Background
-            if let bgImage = NSImage(named: "yellowBackground") {
+            if let bgImage = NSImage(named: "backgroundSquare") {
                 Image(nsImage: bgImage)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -30,14 +30,8 @@ struct VXFissionExtensionMainView: View {
                     delayParam: parameterTree.global.delayTime,
                     bypassParam: parameterTree.global.bypass
                 )
-                .padding(.top, 12)
-                if let fissionImage = NSImage(named: "fission") {
-                    Image(nsImage: fissionImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 204)
-                }
-                Spacer()
+                .padding(.top, 50)
+Spacer()
             }
 
             // Reset button bottom-right
