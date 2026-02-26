@@ -9,6 +9,7 @@
 
 #import <AudioToolbox/AudioToolbox.h>
 #import <algorithm>
+#import <cmath>
 #import <vector>
 #import <span>
 
@@ -30,12 +31,17 @@ public:
         // Allocate enough for 50 ms at the current sample rate, plus one extra
         // sample so a delay of exactly 50 ms never wraps onto itself.
         int maxDelaySamples = (int)(mSampleRate * 0.050) + 1;
-        mDelayBuffer.assign(maxDelaySamples, 0.0f);
+        mDelayBufferL.assign(maxDelaySamples, 0.0f);
+        mDelayBufferR.assign(maxDelaySamples, 0.0f);
         mWriteHead = 0;
+        mSmoothedDelayTimeMs = 0.0f;
+        // One-pole smoothing: ~20 ms time constant eliminates read-head jumps.
+        mSmoothingCoeff = 1.0f - std::exp(-1.0f / (float)(inSampleRate * 0.020));
     }
 
     void deInitialize() {
-        mDelayBuffer.clear();
+        mDelayBufferL.clear();
+        mDelayBufferR.clear();
     }
 
     // MARK: - Bypass
@@ -94,10 +100,10 @@ public:
 
         if (numIn == 0 || numOut == 0) return;
 
-        const int bufSize = (int)mDelayBuffer.size();
+        const int bufSize = (int)mDelayBufferL.size();
+        if (bufSize == 0) return;
 
-        // When bypassed or at center (no delay), just copy dry.
-        if (mBypassed || std::abs(mDelayTimeMs) < 0.001f || bufSize == 0) {
+        if (mBypassed) {
             for (int ch = 0; ch < numOut; ++ch) {
                 int srcCh = std::min(ch, numIn - 1);
                 for (UInt32 f = 0; f < frameCount; ++f) {
@@ -107,38 +113,49 @@ public:
             return;
         }
 
-        // Derive amount and channel from sign of mDelayTimeMs.
-        // negative → delay left (ch 0), positive → delay right (ch 1)
-        float absDelayMs = std::abs(mDelayTimeMs);
-        int delaySamples = std::min(
-            (int)(absDelayMs * (float)mSampleRate / 1000.0f),
-            bufSize - 1
-        );
-
-        // The channel that will be delayed (0 = L, 1 = R).
-        int delayedCh = (mDelayTimeMs > 0.0f) ? 1 : 0;
-        delayedCh = std::min(delayedCh, numOut - 1);
-        // The input channel that feeds the delayed output.
-        int delaySrcCh = std::min(delayedCh, numIn - 1);
-
         for (UInt32 f = 0; f < frameCount; ++f) {
-            // Write the input sample (for the delayed channel) into the ring buffer.
-            mDelayBuffer[mWriteHead] = inputBuffers[delaySrcCh][f];
+            // Smooth target → current one sample at a time.
+            // This moves the read head gradually, avoiding discontinuities.
+            mSmoothedDelayTimeMs += mSmoothingCoeff * (mDelayTimeMs - mSmoothedDelayTimeMs);
 
-            // Read back delaySamples in the past.
+            // Input samples with mono upmix.
+            float inL = inputBuffers[0][f];
+            float inR = inputBuffers[std::min(1, numIn - 1)][f];
+
+            // Always write both channels so the buffers are current for
+            // whichever channel becomes the delayed one (avoids stale-data clicks
+            // when the sign flips and the delayed channel switches).
+            mDelayBufferL[mWriteHead] = inL;
+            mDelayBufferR[mWriteHead] = inR;
+
+            float absDelayMs = std::abs(mSmoothedDelayTimeMs);
+            int delaySamples = std::min(
+                (int)(absDelayMs * (float)mSampleRate / 1000.0f),
+                bufSize - 1
+            );
+
             int readHead = mWriteHead - delaySamples;
             if (readHead < 0) readHead += bufSize;
-            float delayedSample = mDelayBuffer[readHead];
+
+            float outL, outR;
+            if (mSmoothedDelayTimeMs > 0.001f) {
+                // Positive → delay right channel.
+                outL = inL;
+                outR = mDelayBufferR[readHead];
+            } else if (mSmoothedDelayTimeMs < -0.001f) {
+                // Negative → delay left channel.
+                outL = mDelayBufferL[readHead];
+                outR = inR;
+            } else {
+                // Near zero → pass-through.
+                outL = inL;
+                outR = inR;
+            }
+
+            if (numOut > 0) outputBuffers[0][f] = outL;
+            if (numOut > 1) outputBuffers[1][f] = outR;
 
             mWriteHead = (mWriteHead + 1 < bufSize) ? mWriteHead + 1 : 0;
-
-            // Write all output channels: dry pass-through except the delayed one.
-            for (int ch = 0; ch < numOut; ++ch) {
-                int srcCh = std::min(ch, numIn - 1);
-                outputBuffers[ch][f] = (ch == delayedCh)
-                    ? delayedSample
-                    : inputBuffers[srcCh][f];
-            }
         }
     }
 
@@ -160,11 +177,14 @@ public:
     // MARK: Member Variables
     AUHostMusicalContextBlock mMusicalContextBlock;
 
-    double mSampleRate  = 44100.0;
-    float  mDelayTimeMs = 0.0f;   // signed ms: <0 = delay left, >0 = delay right, 0 = dry
-    bool   mBypassed    = false;
+    double mSampleRate           = 44100.0;
+    float  mDelayTimeMs          = 0.0f;   // target: signed ms (<0=delay L, >0=delay R, 0=dry)
+    float  mSmoothedDelayTimeMs  = 0.0f;   // one-pole smoothed value used by render thread
+    float  mSmoothingCoeff       = 0.0f;   // computed in initialize()
+    bool   mBypassed             = false;
     AUAudioFrameCount mMaxFramesToRender = 1024;
 
-    std::vector<float> mDelayBuffer;
+    std::vector<float> mDelayBufferL;  // ring buffer — left channel
+    std::vector<float> mDelayBufferR;  // ring buffer — right channel
     int mWriteHead = 0;
 };
