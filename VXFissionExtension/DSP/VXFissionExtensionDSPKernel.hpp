@@ -18,8 +18,10 @@
  VXFissionExtensionDSPKernel
  As a non-ObjC class, this is safe to use from render thread.
 
- Stereo delay: delays one side (L or R) of the stereo output by a
- user-specified number of milliseconds. The other side passes through dry.
+ Stereo Haas delay: a single signed knob controls both channel and amount.
+   delayTime < 0 → delay left channel by abs(delayTime) ms
+   delayTime > 0 → delay right channel by abs(delayTime) ms
+   delayTime = 0 → pass-through (no delay)
  */
 class VXFissionExtensionDSPKernel {
 public:
@@ -51,9 +53,6 @@ public:
             case VXFissionExtensionParameterAddress::delayTime:
                 mDelayTimeMs = value;
                 break;
-            case VXFissionExtensionParameterAddress::delayChannel:
-                mDelayChannel = (int)(value + 0.5f); // round to 0 (L) or 1 (R)
-                break;
             case VXFissionExtensionParameterAddress::bypass:
                 mBypassed = (value >= 0.5f);
                 break;
@@ -66,8 +65,6 @@ public:
         switch (address) {
             case VXFissionExtensionParameterAddress::delayTime:
                 return (AUValue)mDelayTimeMs;
-            case VXFissionExtensionParameterAddress::delayChannel:
-                return (AUValue)mDelayChannel;
             case VXFissionExtensionParameterAddress::bypass:
                 return (AUValue)(mBypassed ? 1.0f : 0.0f);
             default:
@@ -99,8 +96,8 @@ public:
 
         const int bufSize = (int)mDelayBuffer.size();
 
-        // When bypassed, or delay is zero, just copy dry.
-        if (mBypassed || mDelayTimeMs <= 0.0f || bufSize == 0) {
+        // When bypassed or at center (no delay), just copy dry.
+        if (mBypassed || std::abs(mDelayTimeMs) < 0.001f || bufSize == 0) {
             for (int ch = 0; ch < numOut; ++ch) {
                 int srcCh = std::min(ch, numIn - 1);
                 for (UInt32 f = 0; f < frameCount; ++f) {
@@ -110,14 +107,17 @@ public:
             return;
         }
 
-        // Clamp delay to buffer capacity.
+        // Derive amount and channel from sign of mDelayTimeMs.
+        // negative → delay left (ch 0), positive → delay right (ch 1)
+        float absDelayMs = std::abs(mDelayTimeMs);
         int delaySamples = std::min(
-            (int)(mDelayTimeMs * (float)mSampleRate / 1000.0f),
+            (int)(absDelayMs * (float)mSampleRate / 1000.0f),
             bufSize - 1
         );
 
         // The channel that will be delayed (0 = L, 1 = R).
-        int delayedCh = std::min(mDelayChannel, numOut - 1);
+        int delayedCh = (mDelayTimeMs > 0.0f) ? 1 : 0;
+        delayedCh = std::min(delayedCh, numOut - 1);
         // The input channel that feeds the delayed output.
         int delaySrcCh = std::min(delayedCh, numIn - 1);
 
@@ -160,10 +160,9 @@ public:
     // MARK: Member Variables
     AUHostMusicalContextBlock mMusicalContextBlock;
 
-    double mSampleRate      = 44100.0;
-    float  mDelayTimeMs     = 0.0f;   // delay in milliseconds (0–500)
-    int    mDelayChannel    = 0;      // 0 = delay left, 1 = delay right
-    bool   mBypassed        = false;
+    double mSampleRate  = 44100.0;
+    float  mDelayTimeMs = 0.0f;   // signed ms: <0 = delay left, >0 = delay right, 0 = dry
+    bool   mBypassed    = false;
     AUAudioFrameCount mMaxFramesToRender = 1024;
 
     std::vector<float> mDelayBuffer;

@@ -14,7 +14,8 @@ struct ParameterKnob: View {
     @State private var lastDragValue: CGFloat = 0
 
     let knobSize: CGFloat = 140
-    let scaleRadius: CGFloat = 65  // Closer to knob edge
+    let arcRadius: CGFloat = 78    // radius of the decorative arc ring
+    let labelRadius: CGFloat = 92  // radius at which L/C/R labels sit
 
     var specifier: String {
         switch param.unit {
@@ -36,14 +37,25 @@ struct ParameterKnob: View {
 
     var body: some View {
         ZStack {
-            // Scale markings (0-10) - Simple black tick marks
-            ForEach(0..<11) { i in
-                Rectangle()
-                    .fill(Color.black)
-                    .frame(width: 2, height: i % 2 == 0 ? 12 : 8)
-                    .offset(y: -scaleRadius)
-                    .rotationEffect(Angle(degrees: -135 + (270.0 / 10.0) * Double(i)))
+            // 270° arc stroke: starts at 7 o'clock, ends at 5 o'clock (gap at bottom)
+            // trim(0, 0.75) = 270° starting from 3 o'clock; rotate 135° CW → starts at 7 o'clock
+            Circle()
+                .trim(from: 0, to: 0.75)
+                .stroke(Color.black, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .frame(width: arcRadius * 2, height: arcRadius * 2)
+                .rotationEffect(.degrees(135))
+
+            // L / C / R labels positioned along the arc
+            // Angle formula: x = r·sin(θ), y = -r·cos(θ), θ measured CW from 12 o'clock
+            let s: CGFloat = 0.7071 // sin(135°) = cos(135°) magnitude
+
+            Group {
+                Text("L").offset(x: -labelRadius * s, y: labelRadius * s)
+                Text("C").offset(y: -labelRadius)
+                Text("R").offset(x:  labelRadius * s, y: labelRadius * s)
             }
+            .font(.system(size: 11, weight: .bold, design: .monospaced))
+            .foregroundColor(.black)
 
             // Knob image with rotation
             if let knobImage = NSImage(named: "knob") {

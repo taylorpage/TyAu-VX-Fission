@@ -15,15 +15,7 @@ let VXFissionExtensionParameterSpecs = ParameterTreeSpec {
             identifier: "delayTime",
             name: "Delay",
             units: .milliseconds,
-            valueRange: 0.0...50.0,
-            defaultValue: 0.0
-        )
-        ParameterSpec(
-            address: .delayChannel,
-            identifier: "delayChannel",
-            name: "Delay Channel",
-            units: .boolean,
-            valueRange: 0.0...1.0,
+            valueRange: -50.0...50.0,
             defaultValue: 0.0
         )
         ParameterSpec(

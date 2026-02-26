@@ -10,7 +10,6 @@
 #include <AudioToolbox/AUParameters.h>
 
 typedef NS_ENUM(AUParameterAddress, VXFissionExtensionParameterAddress) {
-    delayTime    = 0,
-    delayChannel = 1,
-    bypass       = 2
+    delayTime = 0,
+    bypass    = 1
 };

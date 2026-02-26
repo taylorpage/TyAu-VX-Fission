@@ -35,10 +35,11 @@ struct LEDMeter: View {
     // Plugin is active when not bypassed
     var isActive: Bool { !bypassParam.boolValue }
 
-    // Maps delay time (0–500 ms) to a level 0–5
+    // Maps abs(delay time) to a level 0–5; center (0 ms) = 0, full deflection = 5
     var level: Int {
-        let normalized = Double(delayParam.value - delayParam.min) / Double(delayParam.max - delayParam.min)
-        return min(Int(normalized * 5.0), 5)
+        let absMs = Double(abs(delayParam.value))
+        let maxMs = Double(delayParam.max) // 50.0
+        return min(Int((absMs / maxMs) * 5.0), 5)
     }
 
     var body: some View {

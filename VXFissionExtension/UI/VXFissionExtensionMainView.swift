@@ -30,10 +30,6 @@ struct VXFissionExtensionMainView: View {
                 Spacer()
             }
 
-            // Channel toggle (L / R) below the knob
-            ChannelToggle(param: parameterTree.global.delayChannel)
-                .offset(y: 90)
-
             // Bypass stomp bottom-center
             VStack {
                 Spacer()
