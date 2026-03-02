@@ -55,6 +55,20 @@ struct LEDMeter: View {
                 Image(nsImage: borderImage)
                     .resizable()
                     .frame(width: imageWidth, height: imageHeight)
+                    .shadow(color: .black.opacity(0.6), radius: 6, x: 0, y: 4)
+                    .overlay(
+                        GeometryReader { geo in
+                            Path { path in
+                                // Bottom edge
+                                path.move(to: CGPoint(x: 0, y: geo.size.height))
+                                path.addLine(to: CGPoint(x: geo.size.width, y: geo.size.height))
+                                // Right edge
+                                path.move(to: CGPoint(x: geo.size.width, y: 0))
+                                path.addLine(to: CGPoint(x: geo.size.width, y: geo.size.height))
+                            }
+                            .stroke(Color.black.opacity(0.5), lineWidth: 3.0)
+                        }
+                    )
             }
 
             // LEDs centered over the holes

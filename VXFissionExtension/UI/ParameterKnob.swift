@@ -41,7 +41,7 @@ struct ParameterKnob: View {
             // trim(0, 0.75) = 270° starting from 3 o'clock; rotate 135° CW → starts at 7 o'clock
             Circle()
                 .trim(from: 0, to: 0.75)
-                .stroke(Color.black, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .stroke(Color.black.opacity(0.75), style: StrokeStyle(lineWidth: 5.0, lineCap: .round))
                 .frame(width: arcRadius * 2, height: arcRadius * 2)
                 .rotationEffect(.degrees(135))
 
@@ -58,7 +58,7 @@ struct ParameterKnob: View {
             .foregroundColor(.black)
 
             // Knob image with rotation
-            if let knobImage = NSImage(named: "knob") {
+            if let knobImage = NSImage(named: "knobSaturated") {
                 Image(nsImage: knobImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)

@@ -21,8 +21,19 @@ struct VXFissionExtensionMainView: View {
                     .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
             }
 
-            // Delay knob centered
+            // Delay knob centered (offset down)
             ParameterKnob(param: parameterTree.global.delayTime)
+                .padding(.top, 60)
+
+            // Title top-center
+            VStack {
+                Text("VX-FISSION")
+                    .font(.custom("Jackwrite-Bold", size: 22))
+                    .foregroundColor(.white)
+                    .shadow(color: .black.opacity(0.6), radius: 2, x: 0, y: 1)
+                    .padding(.top, 12)
+                Spacer()
+            }
 
             // LED meter top-center
             VStack {
@@ -40,8 +51,8 @@ Spacer()
                 HStack {
                     Spacer()
                     ResetButton(param: parameterTree.global.delayTime)
-                        .padding(.trailing, 12)
-                        .padding(.bottom, 12)
+                        .padding(.trailing, 17)
+                        .padding(.bottom, 37)
                 }
             }
 

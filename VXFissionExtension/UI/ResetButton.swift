@@ -12,7 +12,7 @@ struct ResetButton: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            if let image = NSImage(named: "redButton") {
+            if let image = NSImage(named: "rustedRedButton") {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
