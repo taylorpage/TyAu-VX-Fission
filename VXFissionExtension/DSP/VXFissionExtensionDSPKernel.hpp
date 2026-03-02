@@ -81,6 +81,10 @@ public:
         // Chorus LFO: 0.8 Hz sine wave.
         mLFOPhase = 0.0f;
         mLFOPhaseIncrement = (2.0f * (float)M_PI * 0.8f) / (float)inSampleRate;
+        // Compressor: gentle 2:1 ratio above -6 dBFS, depth scales with busAmount.
+        mCompEnv          = 0.0f;
+        mCompAttackCoeff  = 1.0f - std::exp(-1.0f / (float)(inSampleRate * 0.010)); // 10 ms
+        mCompReleaseCoeff = 1.0f - std::exp(-1.0f / (float)(inSampleRate * 0.120)); // 120 ms
         // Reverb: Freeverb-style comb + all-pass filters, sample-rate scaled.
         // Delay times derived from Freeverb's tuned 44100 Hz constants (public domain).
         static const float kCombMs[8] = { 25.31f, 26.94f, 28.96f, 30.75f,
@@ -236,9 +240,9 @@ public:
                 float cL = mDelayBufferL[rh0] + frc * (mDelayBufferL[rh1] - mDelayBufferL[rh0]);
                 float cR = mDelayBufferR[rh0] + frc * (mDelayBufferR[rh1] - mDelayBufferR[rh0]);
 
-                // Blend chorus into the wet bus at a fixed 40 % ratio.
-                wetL = wetL * 0.6f + cL * 0.4f;
-                wetR = wetR * 0.6f + cR * 0.4f;
+                // Blend chorus into the wet bus at a fixed 25 % ratio.
+                wetL = wetL * 0.75f + cL * 0.25f;
+                wetR = wetR * 0.75f + cR * 0.25f;
             }
 
             // === Reverb on the wet bus ===
@@ -257,16 +261,37 @@ public:
                     revL = mAllPassL[i].process(revL);
                     revR = mAllPassR[i].process(revR);
                 }
-                // Blend reverb into the wet bus at 10%.
-                wetL = wetL * 0.90f + revL * 0.10f;
-                wetR = wetR * 0.90f + revR * 0.10f;
+                // Blend reverb into the wet bus at 3%.
+                wetL = wetL * 0.97f + revL * 0.03f;
+                wetR = wetR * 0.97f + revR * 0.03f;
             }
 
-            // === Master dry/wet blend ===
-            // sqrt curve: hits harder early, eases off toward full deflection.
+            // === Master dry/wet blend (gain-compensated parallel) ===
+            // Dry stays at full level; wet is added on top and the sum is
+            // normalised by (1 + masterMix) to compensate for the added energy.
+            // Preserves the weight of the dry signal across the full knob range.
             float masterMix = std::sqrt(busAmount);
-            float outL = inL + masterMix * (wetL - inL);
-            float outR = inR + masterMix * (wetR - inR);
+            float outL = (inL + masterMix * wetL) / (1.0f + masterMix);
+            float outR = (inR + masterMix * wetR) / (1.0f + masterMix);
+
+            // === Light compression on mixed output ===
+            // Feed-forward peak compressor: 2:1 above -6 dBFS, depth scales with busAmount.
+            {
+                float peakIn = std::max(std::abs(outL), std::abs(outR));
+                float coeff  = (peakIn > mCompEnv) ? mCompAttackCoeff : mCompReleaseCoeff;
+                mCompEnv    += coeff * (peakIn - mCompEnv);
+
+                const float kThreshold = 0.5f;  // -6 dBFS
+                float targetGain = 1.0f;
+                if (mCompEnv > kThreshold) {
+                    float reduced = kThreshold + (mCompEnv - kThreshold) * 0.5f; // 2:1
+                    targetGain    = reduced / mCompEnv;
+                }
+                // Blend depth: no effect at centre knob, full at max deflection.
+                float gr = 1.0f - busAmount * (1.0f - targetGain);
+                outL *= gr;
+                outR *= gr;
+            }
 
             if (numOut > 0) outputBuffers[0][f] = outL;
             if (numOut > 1) outputBuffers[1][f] = outR;
@@ -306,6 +331,10 @@ public:
 
     float mLFOPhase          = 0.0f;  // current LFO phase (radians)
     float mLFOPhaseIncrement = 0.0f;  // per-sample phase step (set in initialize())
+
+    float mCompEnv          = 0.0f;  // compressor envelope follower state
+    float mCompAttackCoeff  = 0.0f;  // set in initialize()
+    float mCompReleaseCoeff = 0.0f;  // set in initialize()
 
     CombFilter    mCombL[8];
     CombFilter    mCombR[8];

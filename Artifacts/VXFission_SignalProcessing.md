@@ -18,16 +18,23 @@ Input Signal (mono or stereo)
     ▼
 [Chorus — on wet bus]
   15 ms base delay ± 5 ms LFO depth (0.8 Hz sine)
-  40% blend into wet bus
+  25% blend into wet bus
     │
     ▼
 [Reverb — on wet bus]
   Freeverb-style: 8 comb filters + 4 all-pass filters per channel
-  10% blend into wet bus
+  3% blend into wet bus
     │
     ▼
-[Master dry/wet blend]
-  sqrt(busAmount) curve, 0 at centre → 1.0 at full deflection
+[Master dry/wet blend — gain-compensated parallel]
+  Dry held at full level; wet added on top; sum normalised by (1 + masterMix)
+  masterMix = sqrt(busAmount), busAmount = abs(delayMs) / 50
+    │
+    ▼
+[Light compression]
+  Feed-forward peak compressor: 2:1 above -6 dBFS
+  Attack 10 ms / Release 120 ms
+  Depth scales with busAmount (silent at centre, full at max deflection)
     │
     ▼
 Output Signal (stereo)
@@ -42,7 +49,7 @@ Output Signal (stereo)
 | Delay Time | −50…+50 ms  | 0 ms    | Signed: negative delays L, positive delays R |
 | Bypass     | Boolean     | Off     | Full signal bypass                     |
 
-All effects (Haas, chorus, reverb, dry/wet) are derived algorithmically from the single **Delay Time** knob. No additional parameters are exposed.
+All effects (Haas, chorus, reverb, dry/wet, compression) are derived algorithmically from the single **Delay Time** knob. No additional parameters are exposed.
 
 ---
 
@@ -78,7 +85,7 @@ smoothedDelay += smoothingCoeff × (targetDelay − smoothedDelay)
 - Chorus delay: `15 ms + sin(LFO) × 5 ms` (10–20 ms range)
 - Linear interpolation between adjacent samples for smooth, artifact-free pitch modulation
 - Reads from the same ring buffers as the Haas delay (no extra memory)
-- Blended into the wet bus at **40%**
+- Blended into the wet bus at **25%**
 
 ```
 chorusDelayMs    = 15.0 + sin(lfoPhase) × 5.0
@@ -88,13 +95,16 @@ chorusDelaySamps = chorusDelayMs × sampleRate / 1000   [fractional]
 cL = bufL[floor] + frac × (bufL[floor−1] − bufL[floor])
 cR = bufR[floor] + frac × (bufR[floor−1] − bufR[floor])
 
-wetL = wetL × 0.60 + cL × 0.40
-wetR = wetR × 0.60 + cR × 0.40
+wetL = wetL × 0.75 + cL × 0.25
+wetR = wetR × 0.75 + cR × 0.25
 ```
 
 **Why 15 ms base:**
 - Chorus delays below ~10 ms risk flamming; above ~25 ms they read into the Haas delay zone
 - 15 ms ± 5 ms sits squarely in the classic chorus sweet spot
+
+**Why 25%:**
+- Reduced from 40% to keep the chorus subtle — audible shimmer without pulling focus from the Haas image
 
 ---
 
@@ -127,46 +137,80 @@ wetR = wetR × 0.60 + cR × 0.40
 - Damping: `0.15` (bright, airy character)
 - All-pass feedback: `0.5` (standard Freeverb value)
 
-**Blend into wet bus: 10%**
+**Blend into wet bus: 3%**
 
 ```
 revOut = allPass(sum(combs(monoIn)) × 0.125)
 
-wetL = wetL × 0.90 + revL × 0.10
-wetR = wetR × 0.90 + revR × 0.10
+wetL = wetL × 0.97 + revL × 0.03
+wetR = wetR × 0.97 + revR × 0.03
 ```
 
-**Why 10%:** The reverb tail is long and diffuse. A low blend level adds space and glue without swamping the Haas and chorus. The lush character comes from the high feedback (0.94), not the mix level.
+**Why 3%:** A barely-there hint of space and glue. The long decay tail (feedback 0.94) means even 3% adds meaningful room without swamping the Haas or chorus. Tuned down from 10% → 6% → 3% through listening.
 
 ---
 
-## 4. Master Dry/Wet Blend (Bus Model)
+## 4. Master Dry/Wet Blend (Gain-Compensated Parallel)
 
-**Purpose:** Gradually introduce the full processed signal (Haas + chorus + reverb) as the knob moves away from centre.
+**Purpose:** Introduce the processed signal while preserving the full weight of the dry signal throughout the knob range.
 
 **Implementation:**
 ```
 busAmount = abs(smoothedDelayMs) / 50.0    // 0.0 at centre, 1.0 at max
 masterMix = sqrt(busAmount)                // convex curve: hits harder early
 
-outL = inL + masterMix × (wetL − inL)
-outR = inR + masterMix × (wetR − inR)
+outL = (inL + masterMix × wetL) / (1.0 + masterMix)
+outR = (inR + masterMix × wetR) / (1.0 + masterMix)
 ```
 
-**Blend curve at key positions:**
+**Why parallel instead of crossfade:**
+- The original crossfade model (`dry × (1−mix) + wet × mix`) faded the dry signal as the knob turned, causing a noticeable loss of weight and body — the track felt thinner as the effect increased
+- The parallel model keeps the dry signal at full amplitude; wet is added on top
+- Dividing by `(1 + masterMix)` is the automatic gain compensation: as the parallel wet increases, the sum is normalised back to unity — no level creep, no thinning
 
-| Knob position | busAmount | masterMix (sqrt) |
-|---------------|-----------|------------------|
-| 0% (centre)   | 0.00      | 0%               |
-| 10%           | 0.10      | 32%              |
-| 25%           | 0.25      | 50%              |
-| 50%           | 0.50      | 71%              |
-| 75%           | 0.75      | 87%              |
-| 100% (full)   | 1.00      | 100%             |
+**Blend at key positions:**
 
-**Why sqrt:**
-- Linear blend felt imperceptible near centre
-- Square-root curve gives an immediate sense of the effect even at small deflections, easing naturally toward full wet at the extremes
+| Knob position | busAmount | masterMix (sqrt) | Dry weight |
+|---------------|-----------|------------------|------------|
+| 0% (centre)   | 0.00      | 0%               | 100%       |
+| 25%           | 0.25      | 50%              | 100%       |
+| 50%           | 0.50      | 71%              | 100%       |
+| 100% (full)   | 1.00      | 100%             | 50/50 at unity |
+
+---
+
+## 5. Light Compression
+
+**Purpose:** Add gentle glue and dynamic control to the mixed output as the effect increases.
+
+**Algorithm:** Feed-forward peak compressor with one-pole envelope follower.
+
+```
+peakIn = max(|outL|, |outR|)
+coeff  = (peakIn > env) ? attackCoeff : releaseCoeff
+env   += coeff × (peakIn − env)
+
+// Gain computer: 2:1 above -6 dBFS (0.5 linear)
+if env > 0.5:
+    reduced    = 0.5 + (env − 0.5) × 0.5
+    targetGain = reduced / env
+else:
+    targetGain = 1.0
+
+// Depth scales with knob
+gr   = 1.0 − busAmount × (1.0 − targetGain)
+outL = outL × gr
+outR = outR × gr
+```
+
+**Key parameters:**
+- Threshold: `-6 dBFS` (0.5 linear)
+- Ratio: `2:1`
+- Attack: `10 ms`
+- Release: `120 ms`
+- Depth: scales with `busAmount` — zero compression at centre knob, full compression at max deflection
+
+**Why:** The gain-compensated parallel blend naturally adds some energy when the wet signal reinforces the dry. The compressor catches any peaks, adds subtle glue, and keeps the plugin from ever feeling louder than the dry signal.
 
 ---
 
@@ -186,7 +230,7 @@ outR = inR + masterMix × (wetR − inR)
 ## Design Iterations
 
 ### Pre-chorus (original)
-- Haas delay only, 100% wet at all knob positions
+- Haas delay only, 100% wet crossfade at all knob positions
 - No dry/wet blend
 
 ### v0.2 — Add chorus
@@ -196,7 +240,7 @@ outR = inR + masterMix × (wetR − inR)
 ### v0.3 — Wet bus model
 - Restructured to a parallel dry/wet bus
 - All effects (Haas + chorus) live on the wet bus at full strength
-- Master mix controlled by knob via sqrt curve
+- Master mix controlled by knob via crossfade + sqrt curve
 
 ### v0.4 — Add reverb
 - Freeverb-style reverb added to wet bus
@@ -207,6 +251,14 @@ outR = inR + masterMix × (wetR − inR)
 ### v0.4.1 — Reverb tuning
 - Feedback raised from 0.90 → 0.94 for longer, lusher tail
 - Blend held at 10%
+
+### v0.5 — Blend model overhaul + compression
+- Chorus blend reduced 40% → 25% (subtle shimmer, not prominent)
+- Reverb blend reduced 10% → 6% → 3% (barely-there space)
+- Dry/wet blend changed from crossfade to gain-compensated parallel model
+  — dry signal no longer fades as effect increases; preserves track weight
+- Light feed-forward peak compressor added post-blend (2:1, -6 dBFS, 10/120 ms)
+  — depth scales with busAmount for zero impact at centre knob
 
 ---
 
@@ -221,5 +273,5 @@ outR = inR + masterMix × (wetR − inR)
 ---
 
 **Last Updated:** March 2026
-**Version:** 0.4.1
+**Version:** 0.5
 **Author:** Taylor Page with Claude Sonnet 4.6
