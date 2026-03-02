@@ -15,6 +15,47 @@
 
 #import "VXFissionExtensionParameterAddresses.h"
 
+// ─── Reverb building blocks (Freeverb-style, public domain) ──────────────────
+
+struct CombFilter {
+    std::vector<float> buf;
+    int   head     = 0;
+    float feedback = 0.90f;
+    float damp     = 0.15f;  // one-pole LP damping: 0 = bright, 1 = dark
+    float store    = 0.0f;   // LP filter state
+
+    void init(int delaySamples, float fb, float d) {
+        buf.assign(delaySamples, 0.0f);
+        head = 0; feedback = fb; damp = d; store = 0.0f;
+    }
+    float process(float in) {
+        float out = buf[head];
+        store     = out * (1.0f - damp) + store * damp;
+        buf[head] = in + store * feedback;
+        head      = (head + 1 < (int)buf.size()) ? head + 1 : 0;
+        return out;
+    }
+};
+
+struct AllPassFilter {
+    std::vector<float> buf;
+    int   head     = 0;
+    float feedback = 0.5f;
+
+    void init(int delaySamples) {
+        buf.assign(delaySamples, 0.0f);
+        head = 0;
+    }
+    float process(float in) {
+        float out = buf[head];
+        buf[head] = in + out * feedback;
+        head      = (head + 1 < (int)buf.size()) ? head + 1 : 0;
+        return out - in;
+    }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /*
  VXFissionExtensionDSPKernel
  As a non-ObjC class, this is safe to use from render thread.
@@ -37,6 +78,25 @@ public:
         mSmoothedDelayTimeMs = 0.0f;
         // One-pole smoothing: ~20 ms time constant eliminates read-head jumps.
         mSmoothingCoeff = 1.0f - std::exp(-1.0f / (float)(inSampleRate * 0.020));
+        // Chorus LFO: 0.8 Hz sine wave.
+        mLFOPhase = 0.0f;
+        mLFOPhaseIncrement = (2.0f * (float)M_PI * 0.8f) / (float)inSampleRate;
+        // Reverb: Freeverb-style comb + all-pass filters, sample-rate scaled.
+        // Delay times derived from Freeverb's tuned 44100 Hz constants (public domain).
+        static const float kCombMs[8] = { 25.31f, 26.94f, 28.96f, 30.75f,
+                                          32.24f, 33.81f, 35.31f, 36.66f };
+        static const float kApMs[4]   = { 12.61f, 10.00f,  7.73f,  5.10f };
+        int spread = (int)(0.521f * (float)inSampleRate / 1000.0f); // ~23 samples at 44100
+        for (int i = 0; i < 8; ++i) {
+            int dL = (int)(kCombMs[i] * (float)inSampleRate / 1000.0f);
+            mCombL[i].init(dL,          0.94f, 0.15f);
+            mCombR[i].init(dL + spread, 0.94f, 0.15f);
+        }
+        for (int i = 0; i < 4; ++i) {
+            int dL = (int)(kApMs[i] * (float)inSampleRate / 1000.0f);
+            mAllPassL[i].init(dL);
+            mAllPassR[i].init(dL + spread);
+        }
     }
 
     void deInitialize() {
@@ -137,20 +197,76 @@ public:
             int readHead = mWriteHead - delaySamples;
             if (readHead < 0) readHead += bufSize;
 
-            float outL, outR;
+            // === Wet bus: full Haas delay ===
+            float wetL, wetR;
             if (mSmoothedDelayTimeMs > 0.001f) {
-                // Positive → delay right channel.
-                outL = inL;
-                outR = mDelayBufferR[readHead];
+                wetL = inL;
+                wetR = mDelayBufferR[readHead];
             } else if (mSmoothedDelayTimeMs < -0.001f) {
-                // Negative → delay left channel.
-                outL = mDelayBufferL[readHead];
-                outR = inR;
+                wetL = mDelayBufferL[readHead];
+                wetR = inR;
             } else {
-                // Near zero → pass-through.
-                outL = inL;
-                outR = inR;
+                wetL = inL;
+                wetR = inR;
             }
+
+            // === Chorus on the wet bus ===
+            // LFO advances every sample for continuous phase.
+            mLFOPhase += mLFOPhaseIncrement;
+            if (mLFOPhase >= 2.0f * (float)M_PI) mLFOPhase -= 2.0f * (float)M_PI;
+
+            // Bus send amount: 0 at centre, 1.0 at full deflection.
+            float busAmount = absDelayMs / 50.0f;
+
+            if (busAmount > 0.001f) {
+                float lfo = std::sin(mLFOPhase);
+
+                // Chorus: 15 ms base ± 5 ms depth (fixed within the wet bus).
+                float chorusDelayMs    = 15.0f + lfo * 5.0f;
+                float chorusDelaySampF = chorusDelayMs * (float)mSampleRate / 1000.0f;
+                chorusDelaySampF       = std::max(1.0f, std::min(chorusDelaySampF, (float)(bufSize - 2)));
+
+                int   d0  = (int)chorusDelaySampF;
+                float frc = chorusDelaySampF - (float)d0;
+                int   rh0 = mWriteHead - d0;
+                if (rh0 < 0) rh0 += bufSize;
+                int   rh1 = rh0 - 1;
+                if (rh1 < 0) rh1 += bufSize;
+
+                float cL = mDelayBufferL[rh0] + frc * (mDelayBufferL[rh1] - mDelayBufferL[rh0]);
+                float cR = mDelayBufferR[rh0] + frc * (mDelayBufferR[rh1] - mDelayBufferR[rh0]);
+
+                // Blend chorus into the wet bus at a fixed 40 % ratio.
+                wetL = wetL * 0.6f + cL * 0.4f;
+                wetR = wetR * 0.6f + cR * 0.4f;
+            }
+
+            // === Reverb on the wet bus ===
+            if (busAmount > 0.001f) {
+                // Classic Freeverb approach: mono-sum into comb bank, stereo spread
+                // comes from the slightly different delay times in L vs R combs.
+                float monoIn = (wetL + wetR) * 0.5f;
+                float revL = 0.0f, revR = 0.0f;
+                for (int i = 0; i < 8; ++i) {
+                    revL += mCombL[i].process(monoIn);
+                    revR += mCombR[i].process(monoIn);
+                }
+                revL *= 0.125f;  // scale by 1/8
+                revR *= 0.125f;
+                for (int i = 0; i < 4; ++i) {
+                    revL = mAllPassL[i].process(revL);
+                    revR = mAllPassR[i].process(revR);
+                }
+                // Blend reverb into the wet bus at 10%.
+                wetL = wetL * 0.90f + revL * 0.10f;
+                wetR = wetR * 0.90f + revR * 0.10f;
+            }
+
+            // === Master dry/wet blend ===
+            // sqrt curve: hits harder early, eases off toward full deflection.
+            float masterMix = std::sqrt(busAmount);
+            float outL = inL + masterMix * (wetL - inL);
+            float outR = inR + masterMix * (wetR - inR);
 
             if (numOut > 0) outputBuffers[0][f] = outL;
             if (numOut > 1) outputBuffers[1][f] = outR;
@@ -187,4 +303,12 @@ public:
     std::vector<float> mDelayBufferL;  // ring buffer — left channel
     std::vector<float> mDelayBufferR;  // ring buffer — right channel
     int mWriteHead = 0;
+
+    float mLFOPhase          = 0.0f;  // current LFO phase (radians)
+    float mLFOPhaseIncrement = 0.0f;  // per-sample phase step (set in initialize())
+
+    CombFilter    mCombL[8];
+    CombFilter    mCombR[8];
+    AllPassFilter mAllPassL[4];
+    AllPassFilter mAllPassR[4];
 };
