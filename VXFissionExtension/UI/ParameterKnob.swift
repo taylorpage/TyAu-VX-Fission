@@ -14,8 +14,8 @@ struct ParameterKnob: View {
     @State private var lastDragValue: CGFloat = 0
 
     let knobSize: CGFloat = 140
-    let arcRadius: CGFloat = 78    // radius of the decorative arc ring
-    let labelRadius: CGFloat = 92  // radius at which L/C/R labels sit
+    let arcRadius: CGFloat = 88    // radius of the decorative arc ring
+    let labelRadius: CGFloat = 103  // radius at which L/C/R labels sit
 
     var specifier: String {
         switch param.unit {
@@ -41,7 +41,7 @@ struct ParameterKnob: View {
             // trim(0, 0.75) = 270° starting from 3 o'clock; rotate 135° CW → starts at 7 o'clock
             Circle()
                 .trim(from: 0, to: 0.75)
-                .stroke(Color.black.opacity(0.75), style: StrokeStyle(lineWidth: 5.0, lineCap: .round))
+                .stroke(Color.black.opacity(0.72), style: StrokeStyle(lineWidth: 5.0, lineCap: .round))
                 .frame(width: arcRadius * 2, height: arcRadius * 2)
                 .rotationEffect(.degrees(135))
 
