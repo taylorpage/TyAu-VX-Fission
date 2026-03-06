@@ -7,6 +7,9 @@
 
 import SwiftUI
 
+private class BundleToken {}
+private let extensionBundle = Bundle(for: BundleToken.self)
+
 struct VXFissionExtensionMainView: View {
     var parameterTree: ObservableAUParameterGroup
 
@@ -29,8 +32,9 @@ struct VXFissionExtensionMainView: View {
             VStack {
                 Text("VX-FISSION")
                     .font(.custom("Jackwrite-Bold", size: 22))
-                    .foregroundColor(.white)
-                    .shadow(color: .black.opacity(0.6), radius: 2, x: 0, y: 1)
+                    .foregroundColor(Color(red: 0.878, green: 0.867, blue: 0.800))
+                    .tracking(5)
+                    .shadow(color: .black.opacity(0.55), radius: 1, x: 1, y: 1)
                     .padding(.top, 12)
                 Spacer()
             }
@@ -52,27 +56,24 @@ Spacer()
                     Spacer()
                     ResetButton(param: parameterTree.global.delayTime)
                         .padding(.trailing, 17)
-                        .padding(.bottom, 37)
+                        .padding(.bottom, 47)
                 }
             }
 
-            // Logo bottom-left
+            // Logo bottom-center
             VStack {
                 Spacer()
-                HStack {
-                    if let logoImage = NSImage(named: "TaylorAudio") {
+                Group {
+                    if let path = extensionBundle.path(forResource: "TaylorAudio", ofType: "png"),
+                       let logoImage = NSImage(contentsOfFile: path) {
                         Image(nsImage: logoImage)
-                            .renderingMode(.template)
                             .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 80)
-                            .foregroundColor(.gray)
-                            .opacity(0.7)
+                            .scaledToFit()
+                            .frame(height: 34)
+                            .opacity(0.80)
                     }
-                    Spacer()
                 }
-                .padding(.leading, 12)
-                .padding(.bottom, 12)
+                .padding(.bottom, 4)
             }
         }
         .frame(width: 360, height: 360)
